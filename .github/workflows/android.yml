@@ -1,0 +1,65 @@
+name: Android ARM64 NEON
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-arm64:
+    name: Build Molybdenum (Android arm64-v8a)
+    runs-on: ubuntu-latest
+    env:
+      ANDROID_NDK_VERSION: 27.2.12479018
+      ANDROID_API_LEVEL: 24
+      NNUE_FILE: leecheese.nnue
+      # Optional repository variable: MOLYBDENUM_NNUE_URL
+      NNUE_URL: ${{ vars.MOLYBDENUM_NNUE_URL }}
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Install Android NDK
+        run: |
+          sdkmanager --install "ndk;${ANDROID_NDK_VERSION}"
+          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${ANDROID_NDK_VERSION}" >> "$GITHUB_ENV"
+
+      - name: Prepare NNUE network
+        run: |
+          if [ ! -s "$NNUE_FILE" ] && [ -n "$NNUE_URL" ]; then
+            curl --fail --location --retry 3 "$NNUE_URL" --output "$NNUE_FILE"
+          fi
+          if [ ! -s "$NNUE_FILE" ]; then
+            echo "::error::Missing $NNUE_FILE. Add the network file to the repository root or define the repository variable MOLYBDENUM_NNUE_URL with a direct download URL."
+            exit 1
+          fi
+
+      - name: Build Android ARM64/NEON engine
+        run: |
+          TOOLCHAIN="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          make clean
+          make \
+            CXX="$TOOLCHAIN/aarch64-linux-android${ANDROID_API_LEVEL}-clang++" \
+            STATIC_LINK= \
+            ARCH_FLAGS="-march=armv8-a+simd" \
+            COMPILE_FLAGS="-fPIE" \
+            LINK_FLAGS="-pie -static-libstdc++" \
+            PREPROCESS_CXX=clang++ \
+            PREPROCESS_CXXFLAGS="-Ofast -std=c++17 -Wall -Wextra -pedantic -march=native" \
+            PREPROCESS_LDFLAGS="-Ofast" \
+            EVALFILE="$NNUE_FILE"
+
+      - name: Upload Android ARM64 engine
+        uses: actions/upload-artifact@v4
+        with:
+          name: Molybdenum-Android-arm64-neon
+          path: build/Molybdenum
+          if-no-files-found: error
+          retention-days: 14
