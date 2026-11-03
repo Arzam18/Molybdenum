@@ -6,7 +6,6 @@
 #include <string>
 #include <tuple>
 #include <algorithm>
-#include <immintrin.h>
 #include "BitStuff.h"
 #include "Utility.h"
 #include "Position.h"
