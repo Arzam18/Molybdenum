@@ -21,12 +21,22 @@ all: $(DEFAULT_EXE) clean_preprocess
 
 datagen: $(DATAGEN_EXE) clean_preprocess
 
-CXXFLAGS = -static -Ofast -std=c++17
-CXXFLAGS += -Wall -Wextra -pedantic
-CXXFLAGS += -march=native
+# Override STATIC_LINK and ARCH_FLAGS when cross-compiling (for example, Android NDK).
+STATIC_LINK ?= -static
+ARCH_FLAGS ?= -march=native
+COMPILE_FLAGS ?=
+LINK_FLAGS ?=
+
+# The NNUE preprocessing tool must run on the build host during cross-compiles.
+PREPROCESS_CXX ?= $(CXX)
+PREPROCESS_CXXFLAGS ?= $(CXXFLAGS)
+PREPROCESS_LDFLAGS ?= $(LDFLAGS)
+
+CXXFLAGS = $(STATIC_LINK) -Ofast -std=c++17
+CXXFLAGS += -Wall -Wextra -pedantic $(ARCH_FLAGS) $(COMPILE_FLAGS)
 CXXFLAGS += -DWDLFILE=\"$(WDLFILE)\"
 
-LDFLAGS += -static -Ofast -march=native
+LDFLAGS = $(STATIC_LINK) -Ofast $(ARCH_FLAGS) $(LINK_FLAGS)
 
 ifeq ($(OS),Windows_NT)
 	LDFLAGS += -Wl,/STACK:4294967296
@@ -47,7 +57,7 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp $(PREPROCESSED_NET)
 	$(CXX) -I$(SRC_DIR) $(CXXFLAGS) -DEVALFILE=\"$(PREPROCESSED_NET)\" -c $< -o $@
 
 $(OBJ_DIR)/preprocess.o: $(SRC_DIR)/util/preprocess.cpp
-	$(CXX) -I$(SRC_DIR) $(CXXFLAGS) -DEVALFILE=\"$(EVALFILE)\" -c $< -o $@
+	$(PREPROCESS_CXX) -I$(SRC_DIR) $(PREPROCESS_CXXFLAGS) -DEVALFILE=\"$(EVALFILE)\" -c $< -o $@
 
 $(OBJECTS): | $(OBJ_DIR)
 
@@ -66,7 +76,7 @@ $(DATAGEN_EXE): $(DG_OBJECTS)
 	$(CXX) $(LDFLAGS) $(DG_OBJECTS) -o $(DATAGEN_EXE)
 
 $(PREPROCESS_EXE): $(PP_OBJECTS) $(EVALFILE)
-	$(CXX) $(LDFLAGS) $(PP_OBJECTS) -o $(PREPROCESS_EXE)
+	$(PREPROCESS_CXX) $(PREPROCESS_LDFLAGS) $(PP_OBJECTS) -o $(PREPROCESS_EXE)
 
 $(PREPROCESSED_NET): $(PREPROCESS_EXE)
 	./$(PREPROCESS_EXE) $(PREPROCESSED_NET)
